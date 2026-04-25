@@ -1,0 +1,26 @@
+=== Fisa student ===
+Cod personal: 2
+Nume: Mihai
+Prenume: ionut
+Varsta: 20
+An studiu: 1
+Grupa: 7
+Email: ionut.mihai@student.tuiasi.ro
+Bonus media: 0.00
+
+=== Situatie scolara ===
+Semestrul 1 -> Credite: 7 | Medie ponderata: 6.57
+Semestrul 2 -> Credite: 7 | Medie ponderata: 4.71
+Discipline cu peste 4 credite: 0
+Discipline picate sau absente: 2
+Semestre cu scadere: 2 
+Semestrul 1 are exact o restanta/absenta. Medie curenta 6.57, medie fara disciplina 7.60
+Semestrul 2 are exact o restanta/absenta. Medie curenta 4.71, medie fara disciplina 7.00
+
+=== Detalii discipline ===
+Semestrul 1, Disciplina 1: Nota=8 Credite=3
+Semestrul 1, Disciplina 2: Nota=4 Credite=2
+Semestrul 1, Disciplina 3: Nota=7 Credite=2
+Semestrul 2, Disciplina 1: Nota=7 Credite=2
+Semestrul 2, Disciplina 2: Nota=7 Credite=1
+Semestrul 2, Disciplina 3: Nota=3 Credite=4

@@ -1,0 +1,6 @@
+18:28:06 **** Rebuild of configuration Debug for project StudentLauncher ****
+Info: Internal Builder is used for build
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\h.o" "..\\src\\h.c" 
+gcc -o StudentLauncher.exe "src\\h.o" 
+Info: Nothing to build for StudentLauncher
+Info: Nothing to build for StudentLauncher

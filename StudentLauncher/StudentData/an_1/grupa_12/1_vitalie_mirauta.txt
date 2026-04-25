@@ -1,0 +1,24 @@
+=== Fisa student ===
+Cod personal: 1
+Nume: vitalie
+Prenume: mirauta
+Varsta: 20
+An studiu: 1
+Grupa: 12
+Email: mirauta.vitalie@student.tuiasi.ro
+Bonus media: 0.00
+
+=== Situatie scolara ===
+Semestrul 1 -> Credite: 7 | Medie ponderata: 8.86
+Semestrul 2 -> Credite: 7 | Medie ponderata: 8.29
+Discipline cu peste 4 credite: 0
+Discipline picate sau absente: 0
+Semestre cu scadere: 2 
+
+=== Detalii discipline ===
+Semestrul 1, Disciplina 1: Nota=10 Credite=3
+Semestrul 1, Disciplina 2: Nota=7 Credite=2
+Semestrul 1, Disciplina 3: Nota=9 Credite=2
+Semestrul 2, Disciplina 1: Nota=9 Credite=2
+Semestrul 2, Disciplina 2: Nota=5 Credite=2
+Semestrul 2, Disciplina 3: Nota=10 Credite=3

@@ -1,0 +1,11 @@
+14:43:38 **** Rebuild of configuration Debug for project OpenGLViewer ****
+Info: Internal Builder is used for build
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\medii_opengl.o" "..\\src\\medii_opengl.c" 
+..\src\medii_opengl.c: In function 'main':
+..\src\medii_opengl.c:588:17: warning: variable 'cale_fisier' set but not used [-Wunused-but-set-variable]
+  588 |     const char *cale_fisier;
+      |                 ^~~~~~~~~~~
+gcc -o OpenGLViewer.exe "src\\medii_opengl.o" -lfreeglut -lglu32 -lgdi32 -lopengl32 -lwinmm 
+
+14:43:40 Build Finished. 0 errors, 1 warnings. (took 1s.999ms)
+

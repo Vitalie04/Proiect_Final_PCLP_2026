@@ -1,0 +1,9 @@
+=== Fisa student ===
+Cod personal: 3
+Nume: Vitalia
+Prenume: Vitalia
+Varsta: 12
+An studiu: 2
+Grupa: 2
+Email: vitalia.vitalia@student.tuiasi.ro
+Bonus media: 0.00

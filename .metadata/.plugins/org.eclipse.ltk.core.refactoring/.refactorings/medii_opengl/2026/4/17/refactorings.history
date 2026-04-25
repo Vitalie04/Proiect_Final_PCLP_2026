@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Move &apos;Runtime&apos; to &apos;OpenGLViewer&apos;" description="Move &apos;Runtime&apos; to &apos;OpenGLViewer&apos;" destination="/OpenGLViewer" element1="/StudentLauncher/Debug/src/Runtime" flags="7" id="org.eclipse.ltk.core.refactoring.move.resources" resources="1" stamp="1776871684079" updateReferences="true"/>
+</session>

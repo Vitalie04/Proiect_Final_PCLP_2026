@@ -1,0 +1,1566 @@
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+
+#ifdef _WIN32
+#include <direct.h>
+#include <windows.h>
+#include <shellapi.h>
+#define MKDIR(path) _mkdir(path)
+#else
+#include <sys/stat.h>
+#define MKDIR(path) mkdir(path, 0777)
+#endif
+
+#define MAX_SEM_FIS 40
+#define MAX_DISC_FIS 80
+
+typedef struct {
+    int semestre;
+    int discipline;
+    int **note;
+    int **credite;
+    double *medii_ponderate;
+    int *credite_semestru;
+    int nr_discipline_peste_4_credite;
+    int nr_restante_absente;
+    int nr_semestre_scadere;
+    int *semestre_scadere;
+} SituatieStudent;
+
+typedef struct {
+    int cod_personal;
+    char nume[50];
+    char prenume[50];
+    int varsta;
+    int an_studiu;
+    int grupa;
+    char email[80];
+    double bonus_media;
+    SituatieStudent situatie;
+} DateStudent;
+
+static DateStudent *studenti = NULL;
+static int nr_studenti = 0;
+static int capacitate_studenti = 0;
+static int urmator_cod_personal = 1;
+
+void initializare_situatie(SituatieStudent *s);
+void elibereaza_situatie(SituatieStudent *s);
+void elibereaza_toata_memoria(void);
+int asigura_capacitate_studenti(void);
+int creeaza_director_daca_lipseste(const char *cale);
+void alege_an_si_grupa(int *an_studiu, int *grupa);
+void adaugare_studenti(void);
+void afisare_studenti(void);
+DateStudent *cauta_student_dupa_cod(int cod);
+void calculeaza_indicatori_scolari(SituatieStudent *s);
+void introdu_situatie_pentru_student(void);
+void afiseaza_raport_student(void);
+double media_generala(const DateStudent *student);
+void afiseaza_clasament_dupa_medie(void);
+void scrie_fisa_student(DateStudent *student);
+void construieste_email(const char *prenume, const char *nume, char *email, size_t dim_email);
+int egal_ignore_case(const char *a, const char *b);
+void cauta_student_dupa_nume_prenume(void);
+void deschide_mod_grafic_student(void);
+void sterge_student(void);
+int incarca_un_student_din_fisier(const char *cale_fisier);
+int incarca_studenti_din_fisiere(void);
+void joaca_ruleta_ruseasca(void);
+double media_generala_fara_bonus(const DateStudent *student);
+void verifica_bonus_media_student(void);
+
+void construieste_email(const char *prenume, const char *nume, char *email, size_t dim_email) {
+    char prenume_mic[50];
+    char nume_mic[50];
+    size_t i;
+    char ch;
+
+    for (i = 0; i < sizeof(prenume_mic) - 1 && prenume[i] != '\0'; i++) {
+        ch = prenume[i];
+        if (ch >= 'A' && ch <= 'Z') {
+            ch = (char)(ch + ('a' - 'A'));
+        }
+        prenume_mic[i] = ch;
+    }
+    prenume_mic[i] = '\0';
+
+    for (i = 0; i < sizeof(nume_mic) - 1 && nume[i] != '\0'; i++) {
+        ch = nume[i];
+        if (ch >= 'A' && ch <= 'Z') {
+            ch = (char)(ch + ('a' - 'A'));
+        }
+        nume_mic[i] = ch;
+    }
+    nume_mic[i] = '\0';
+
+    snprintf(email, dim_email, "%s.%s@student.tuiasi.ro", prenume_mic, nume_mic);
+}
+
+int egal_ignore_case(const char *a, const char *b) {
+    while (*a != '\0' && *b != '\0') {
+        if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) {
+            return 0;
+        }
+        a++;
+        b++;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+void initializare_situatie(SituatieStudent *s) {
+    s->semestre = 0;
+    s->discipline = 0;
+    s->note = NULL;
+    s->credite = NULL;
+    s->medii_ponderate = NULL;
+    s->credite_semestru = NULL;
+    s->nr_discipline_peste_4_credite = 0;
+    s->nr_restante_absente = 0;
+    s->nr_semestre_scadere = 0;
+    s->semestre_scadere = NULL;
+}
+
+void elibereaza_situatie(SituatieStudent *s) {
+    int i;
+    if (s->note != NULL) {
+        for (i = 0; i < s->semestre; i++) {
+            free(s->note[i]);
+        }
+        free(s->note);
+    }
+    if (s->credite != NULL) {
+        for (i = 0; i < s->semestre; i++) {
+            free(s->credite[i]);
+        }
+        free(s->credite);
+    }
+    free(s->medii_ponderate);
+    free(s->credite_semestru);
+    free(s->semestre_scadere);
+    initializare_situatie(s);
+}
+
+void elibereaza_toata_memoria(void) {
+    int i;
+    for (i = 0; i < nr_studenti; i++) {
+        elibereaza_situatie(&studenti[i].situatie);
+    }
+    free(studenti);
+    studenti = NULL;
+    nr_studenti = 0;
+    capacitate_studenti = 0;
+}
+
+int asigura_capacitate_studenti(void) {
+    DateStudent *nou_vector;
+    int capacitate_noua;
+    if (nr_studenti < capacitate_studenti) {
+        return 1;
+    }
+    capacitate_noua = (capacitate_studenti == 0) ? 4 : capacitate_studenti * 2;
+    nou_vector = (DateStudent *)realloc(studenti, (size_t)capacitate_noua * sizeof(DateStudent));
+    if (nou_vector == NULL) {
+        printf("Eroare: nu s-a putut realoca memorie pentru studenti.\n");
+        return 0;
+    }
+    studenti = nou_vector;
+    capacitate_studenti = capacitate_noua;
+    return 1;
+}
+
+int creeaza_director_daca_lipseste(const char *cale) {
+    if (MKDIR(cale) == 0) {
+        return 1;
+    }
+    if (errno == EEXIST) {
+        return 1;
+    }
+    return 0;
+}
+
+void alege_an_si_grupa(int *an_studiu, int *grupa) {
+    int an, g;
+    do {
+        printf("Alege anul de studiu (1-4): ");
+        fflush(stdout);
+        scanf("%d", &an);
+    } while (an < 1 || an > 4);
+
+    do {
+        printf("Alege grupa (1-15): ");
+        fflush(stdout);
+        scanf("%d", &g);
+    } while (g < 1 || g > 15);
+
+    *an_studiu = an;
+    *grupa = g;
+}
+
+void scrie_fisa_student(DateStudent *student) {
+    char director_an[64];
+    char director_grupa[96];
+    char fisier[200];
+    FILE *f;
+    int sem, d;
+    int restante_sem;
+    int idx_restanta;
+    int suma_credite;
+    int suma_produs;
+    int credit_rest;
+    int punctaj_rest;
+    int credite_fara;
+    double medie_fara_restanta;
+    SituatieStudent *s = &student->situatie;
+
+    snprintf(director_an, sizeof(director_an), "an_%d", student->an_studiu);
+    snprintf(director_grupa, sizeof(director_grupa), "%s\\grupa_%d", director_an, student->grupa);
+    if (!creeaza_director_daca_lipseste(director_an) || !creeaza_director_daca_lipseste(director_grupa)) {
+        printf("Avertisment: nu am putut crea directoarele pentru fisierul studentului.\n");
+        return;
+    }
+
+    snprintf(
+        fisier,
+        sizeof(fisier),
+        "%s\\%d_%s_%s.txt",
+        director_grupa,
+        student->cod_personal,
+        student->nume,
+        student->prenume
+    );
+
+    f = fopen(fisier, "w");
+    if (f == NULL) {
+        printf("Avertisment: nu am putut deschide fisierul pentru student.\n");
+        return;
+    }
+
+    fprintf(f, "=== Fisa student ===\n");
+    fprintf(f, "Cod personal: %d\n", student->cod_personal);
+    fprintf(f, "Nume: %s\n", student->nume);
+    fprintf(f, "Prenume: %s\n", student->prenume);
+    fprintf(f, "Varsta: %d\n", student->varsta);
+    fprintf(f, "An studiu: %d\n", student->an_studiu);
+    fprintf(f, "Grupa: %d\n", student->grupa);
+    fprintf(f, "Email: %s\n", student->email);
+    fprintf(f, "Bonus media: %.2f\n", student->bonus_media);
+
+    if (s->semestre > 0 && s->discipline > 0 && s->note != NULL && s->credite != NULL) {
+        calculeaza_indicatori_scolari(s);
+        fprintf(f, "\n=== Situatie scolara ===\n");
+        for (sem = 0; sem < s->semestre; sem++) {
+            fprintf(
+                f,
+                "Semestrul %d -> Credite: %d | Medie ponderata: %.2f\n",
+                sem + 1,
+                s->credite_semestru[sem],
+                s->medii_ponderate[sem]
+            );
+        }
+
+        fprintf(f, "Discipline cu peste 4 credite: %d\n", s->nr_discipline_peste_4_credite);
+        fprintf(f, "Discipline picate sau absente: %d\n", s->nr_restante_absente);
+
+        if (s->nr_semestre_scadere == 0) {
+            fprintf(f, "Semestre cu scadere: niciunul\n");
+        } else {
+            fprintf(f, "Semestre cu scadere: ");
+            for (sem = 0; sem < s->nr_semestre_scadere; sem++) {
+                fprintf(f, "%d ", s->semestre_scadere[sem]);
+            }
+            fprintf(f, "\n");
+        }
+
+        for (sem = 0; sem < s->semestre; sem++) {
+            restante_sem = 0;
+            idx_restanta = -1;
+            suma_credite = 0;
+            suma_produs = 0;
+
+            for (d = 0; d < s->discipline; d++) {
+                if (s->note[sem][d] == -1 || s->credite[sem][d] == -1) {
+                    continue;
+                }
+                suma_credite += s->credite[sem][d];
+                suma_produs += s->note[sem][d] * s->credite[sem][d];
+                if (s->note[sem][d] >= 0 && s->note[sem][d] < 5) {
+                    restante_sem++;
+                    idx_restanta = d;
+                }
+            }
+
+            if (restante_sem == 1 && idx_restanta >= 0) {
+                credit_rest = s->credite[sem][idx_restanta];
+                punctaj_rest = s->note[sem][idx_restanta] * credit_rest;
+                credite_fara = suma_credite - credit_rest;
+                medie_fara_restanta =
+                    (credite_fara > 0) ? (double)(suma_produs - punctaj_rest) / (double)credite_fara : 0.0;
+
+                fprintf(
+                    f,
+                    "Semestrul %d are exact o restanta/absenta. Medie curenta %.2f, medie fara disciplina %.2f\n",
+                    sem + 1,
+                    s->medii_ponderate[sem],
+                    medie_fara_restanta
+                );
+            }
+        }
+
+        fprintf(f, "\n=== Detalii discipline ===\n");
+        for (sem = 0; sem < s->semestre; sem++) {
+            for (d = 0; d < s->discipline; d++) {
+                fprintf(
+                    f,
+                    "Semestrul %d, Disciplina %d: Nota=%d Credite=%d\n",
+                    sem + 1,
+                    d + 1,
+                    s->note[sem][d],
+                    s->credite[sem][d]
+                );
+            }
+        }
+    }
+
+    fclose(f);
+}
+
+void adaugare_studenti(void) {
+    int continua = 1;
+    int incepe;
+    DateStudent *student;
+
+    while (continua == 1) {
+        printf("\n=== Adaugare student nou ===\n");
+        printf("Continui adaugarea? (1=Da, 0=Cancel): ");
+        fflush(stdout);
+        scanf("%d", &incepe);
+
+        if (incepe == 0) {
+            printf("Adaugarea a fost anulata. Revenire la meniul principal.\n");
+            break;
+        }
+        if (incepe != 1) {
+            printf("Optiune invalida. Incearca din nou.\n");
+            continue;
+        }
+
+        if (!asigura_capacitate_studenti()) {
+            return;
+        }
+
+        student = &studenti[nr_studenti];
+        initializare_situatie(&student->situatie);
+        student->bonus_media = 0.0;
+
+        printf("Nume (0=Cancel): ");
+        fflush(stdout);
+        scanf("%49s", student->nume);
+        if (strcmp(student->nume, "0") == 0) {
+            printf("Adaugarea a fost anulata. Revenire la meniul principal.\n");
+            break;
+        }
+
+        printf("Prenume (0=Cancel): ");
+        fflush(stdout);
+        scanf("%49s", student->prenume);
+        if (strcmp(student->prenume, "0") == 0) {
+            printf("Adaugarea a fost anulata. Revenire la meniul principal.\n");
+            break;
+        }
+
+        printf("Varsta (0=Cancel): ");
+        fflush(stdout);
+        scanf("%d", &student->varsta);
+        if (student->varsta == 0) {
+            printf("Adaugarea a fost anulata. Revenire la meniul principal.\n");
+            break;
+        }
+
+        student->cod_personal = urmator_cod_personal++;
+        construieste_email(student->prenume, student->nume, student->email, sizeof(student->email));
+
+        alege_an_si_grupa(&student->an_studiu, &student->grupa);
+        scrie_fisa_student(student);
+
+        nr_studenti++;
+        printf("Student adaugat cu succes. Cod personal: %d\n", student->cod_personal);
+        printf("Email generat: %s\n", student->email);
+
+        printf("Mai doresti sa adaugi alt student? (1=Da, 0=Nu): ");
+        fflush(stdout);
+        scanf("%d", &continua);
+    }
+}
+
+void afisare_studenti(void) {
+    int i;
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti inregistrati.\n");
+        return;
+    }
+
+    printf("\n=== Lista studenti ===\n");
+    for (i = 0; i < nr_studenti; i++) {
+        printf(
+            "Cod %d | %s %s | An %d Grupa %d | Bonus %.2f\n",
+            studenti[i].cod_personal,
+            studenti[i].nume,
+            studenti[i].prenume,
+            studenti[i].an_studiu,
+            studenti[i].grupa,
+            studenti[i].bonus_media
+        );
+    }
+}
+
+void cauta_student_dupa_nume_prenume(void) {
+    char nume_cautat[50];
+    char prenume_cautat[50];
+    int i;
+    int gasit = 0;
+
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti inregistrati.\n");
+        return;
+    }
+
+    printf("Introdu numele: ");
+    fflush(stdout);
+    scanf("%49s", nume_cautat);
+    printf("Introdu prenumele: ");
+    fflush(stdout);
+    scanf("%49s", prenume_cautat);
+
+    printf("\nRezultate cautare:\n");
+    for (i = 0; i < nr_studenti; i++) {
+        if (egal_ignore_case(studenti[i].nume, nume_cautat) &&
+            egal_ignore_case(studenti[i].prenume, prenume_cautat)) {
+            printf(
+                "Cod %d | %s %s | An %d Grupa %d | Email %s\n",
+                studenti[i].cod_personal,
+                studenti[i].nume,
+                studenti[i].prenume,
+                studenti[i].an_studiu,
+                studenti[i].grupa,
+                studenti[i].email
+            );
+            gasit = 1;
+        }
+    }
+
+    if (!gasit) {
+        printf("Nu exista student cu acest nume si prenume.\n");
+    }
+}
+
+void deschide_mod_grafic_student(void) {
+    int cod,optiune;
+    int i,j,nr_selectati;
+    DateStudent *student;
+    int coduri_selectati[5];
+    char fisier_rel[220];
+    int selectie[5];
+    int arata_men;
+    
+#ifdef _WIN32
+    char exe_path[MAX_PATH];
+    char base_dir[MAX_PATH];
+    char parent_dir[MAX_PATH];
+    char exe_grafic[MAX_PATH];
+    char exe_grafic_nou[MAX_PATH];
+    char exe_grafic_runtime[MAX_PATH];
+    char exe_grafic_runtime_parent[MAX_PATH];
+    char fisier_abs[700];
+    char *last_sep;
+    char *parent_sep;
+    HINSTANCE rez_shell;
+    char argumente[3000];
+    size_t used;
+    int written;
+#endif
+
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti inregistrati.\n");
+        return;
+    }
+
+    memset(selectie, 0, sizeof(selectie));
+    nr_selectati = 0;
+
+    /* Meniu de selectie */
+    printf("\n=== MOD GRAFIC - Selectie Studenti ===\n");
+    printf("1. Vizualizare student individual\n");
+    printf("2. Compara mai multi studenti\n");
+    printf("Optiune: ");
+    fflush(stdout);
+    scanf("%d", &optiune);
+
+    if (optiune == 1) {
+        /* Mod individual */
+        printf("Introdu codul personal al studentului: ");
+        fflush(stdout);
+        scanf("%d", &cod);
+        student = cauta_student_dupa_cod(cod);
+        if (student == NULL) {
+            printf("Student inexistent.\n");
+            return;
+        }
+        coduri_selectati[0] = cod;
+        nr_selectati = 1;
+    } else if (optiune == 2) {
+        /* Mod comparare - selectie multipla */
+        printf("Selecteaza studentii pentru comparare (max 5):\n");
+        printf("Apasa 0 cand ai terminat selectia.\n\n");
+        
+        j = 0;
+        while (j < 5) {
+            printf("Introdu codul personal al studentului %d (sau 0 pentru a termina): ", j + 1);
+            fflush(stdout);
+            scanf("%d", &cod);
+            
+            if (cod == 0) {
+                break;
+            }
+            
+            student = cauta_student_dupa_cod(cod);
+            if (student == NULL) {
+                printf("  >> Student inexistent. Incearca din nou.\n");
+                continue;
+            }
+            
+            /* verifica daca e deja luat */
+            arata_men = 0;
+            for (i = 0; i < j; i++) {
+                if (coduri_selectati[i] == cod) {
+                    printf("  >> Acest student a fost deja selectat.\n");
+                    arata_men = 1;
+                    break;
+                }
+            }
+            
+            if (arata_men == 0) {
+                coduri_selectati[j] = cod;
+                printf("  OK. %s %s adaugat la comparare.\n", student->nume, student->prenume);
+                j++;
+            }
+        }
+        
+        if (j == 0) {
+            printf("Niciun student selectat. Revenire.\n");
+            return;
+        }
+        nr_selectati = j;
+    } else {
+        printf("Optiune invalida.\n");
+        return;
+    }
+
+
+#ifdef _WIN32
+    if (GetModuleFileNameA(NULL, exe_path, MAX_PATH) > 0) {
+        strncpy(base_dir, exe_path, sizeof(base_dir) - 1);
+        base_dir[sizeof(base_dir) - 1] = '\0';
+        last_sep = strrchr(base_dir, '\\');
+        if (last_sep != NULL) {
+            *last_sep = '\0';
+            snprintf(exe_grafic_nou, sizeof(exe_grafic_nou), "%s\\medii_opengl_new.exe", base_dir);
+            snprintf(exe_grafic, sizeof(exe_grafic), "%s\\medii_opengl.exe", base_dir);
+            snprintf(exe_grafic_runtime, sizeof(exe_grafic_runtime), "%s\\Runtime\\medii_opengl_new.exe", base_dir);
+
+            strncpy(parent_dir, base_dir, sizeof(parent_dir) - 1);
+            parent_dir[sizeof(parent_dir) - 1] = '\0';
+            parent_sep = strrchr(parent_dir, '\\');
+            if (parent_sep != NULL) {
+                *parent_sep = '\0';
+            }
+            snprintf(exe_grafic_runtime_parent, sizeof(exe_grafic_runtime_parent), "%s\\Runtime\\medii_opengl_new.exe", parent_dir);
+
+            if (GetFileAttributesA(exe_grafic_nou) != INVALID_FILE_ATTRIBUTES) {
+                strncpy(exe_grafic, exe_grafic_nou, sizeof(exe_grafic) - 1);
+                exe_grafic[sizeof(exe_grafic) - 1] = '\0';
+            } else if (GetFileAttributesA(exe_grafic_runtime) != INVALID_FILE_ATTRIBUTES) {
+                strncpy(exe_grafic, exe_grafic_runtime, sizeof(exe_grafic) - 1);
+                exe_grafic[sizeof(exe_grafic) - 1] = '\0';
+            } else if (GetFileAttributesA(exe_grafic_runtime_parent) != INVALID_FILE_ATTRIBUTES) {
+                strncpy(exe_grafic, exe_grafic_runtime_parent, sizeof(exe_grafic) - 1);
+                exe_grafic[sizeof(exe_grafic) - 1] = '\0';
+            }
+            
+            if (GetFileAttributesA(exe_grafic) == INVALID_FILE_ATTRIBUTES) {
+                printf("Nu exista executabilul grafic: %s\n", exe_grafic);
+                return;
+            }
+
+            /* Construieste argumente cu fisierele studentilor selectati */
+            argumente[0] = '\0';
+            for (i = 0; i < nr_selectati; i++) {
+                student = cauta_student_dupa_cod(coduri_selectati[i]);
+                if (student != NULL) {
+                    snprintf(
+                        fisier_rel,
+                        sizeof(fisier_rel),
+                        "an_%d\\grupa_%d\\%d_%s_%s.txt",
+                        student->an_studiu,
+                        student->grupa,
+                        student->cod_personal,
+                        student->nume,
+                        student->prenume
+                    );
+                    
+                    snprintf(fisier_abs, sizeof(fisier_abs), "%s\\%s", base_dir, fisier_rel);
+                    
+                    if (GetFileAttributesA(fisier_abs) == INVALID_FILE_ATTRIBUTES) {
+                        printf("Nu exista fisierul studentului: %s\n", fisier_abs);
+                        return;
+                    }
+                    
+                    /* Adauga fisierul la argumente ca parametru separat: "cale1" "cale2" */
+                    used = strlen(argumente);
+                    written = snprintf(
+                        argumente + used,
+                        sizeof(argumente) - used,
+                        "%s\"%s\"",
+                        (i > 0) ? " " : "",
+                        fisier_abs
+                    );
+                    if (written < 0 || (size_t)written >= sizeof(argumente) - used) {
+                        printf("Lista de fisiere pentru modul grafic este prea lunga.\n");
+                        return;
+                    }
+                }
+            }
+            
+            printf("\nLansez modul grafic cu %d student(i)...\n", nr_selectati);
+            rez_shell = ShellExecuteA(NULL, "open", exe_grafic, argumente, base_dir, SW_SHOWNORMAL);
+            if ((INT_PTR)rez_shell <= 32) {
+                printf("Nu am putut lansa modulul grafic (cod ShellExecute=%ld).\n", (long)(INT_PTR)rez_shell);
+            }
+        } else {
+            printf("Nu am putut determina folderul executabilului curent.\n");
+        }
+    } else {
+        printf("Nu am putut obtine calea executabilului curent.\n");
+    }
+#else
+    (void)fisier_rel;
+    printf("Lansarea modulului grafic este implementata doar pentru Windows in aceasta versiune.\n");
+#endif
+}
+
+void sterge_student(void) {
+    int cod;
+    int idx;
+    int i;
+    int rezulat;
+    DateStudent *student;
+    char fisier[220];
+
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti inregistrati.\n");
+        return;
+    }
+
+    printf("Introdu codul personal al studentului de sters: ");
+    fflush(stdout);
+    scanf("%d", &cod);
+
+    idx = -1;
+    for (i = 0; i < nr_studenti; i++) {
+        if (studenti[i].cod_personal == cod) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx == -1) {
+        printf("Student inexistent.\n");
+        return;
+    }
+
+    student = &studenti[idx];
+    snprintf(
+        fisier,
+        sizeof(fisier),
+        "an_%d\\grupa_%d\\%d_%s_%s.txt",
+        student->an_studiu,
+        student->grupa,
+        student->cod_personal,
+        student->nume,
+        student->prenume
+    );
+
+    rezulat = remove(fisier);
+    if (rezulat == 0) {
+        printf("Fisier sters: %s\n", fisier);
+    } else {
+        printf("Avertisment: fisierul nu a putut fi sters sau nu exista: %s\n", fisier);
+    }
+
+    elibereaza_situatie(&studenti[idx].situatie);
+    for (i = idx; i < nr_studenti - 1; i++) {
+        studenti[i] = studenti[i + 1];
+    }
+    nr_studenti--;
+
+    printf("Studentul cu codul %d a fost sters din baza de date.\n", cod);
+}
+
+int incarca_un_student_din_fisier(const char *cale_fisier) {
+    FILE *f;
+    char linie[256];
+    char *p;
+    char *endptr;
+    DateStudent student_temp;
+    int sem_idx;
+    int disc_idx;
+    int nota;
+    int credit;
+    int max_sem;
+    int max_disc;
+    int i;
+    int j;
+    int ok_linii;
+    int in_detalii;
+    int semestre_summary;
+    int nr_scadere;
+    int cred_sem;
+    double medie_sem;
+    int tmp_note[MAX_SEM_FIS][MAX_DISC_FIS];
+    int tmp_credite_det[MAX_SEM_FIS][MAX_DISC_FIS];
+    int tmp_credite_sum[MAX_SEM_FIS];
+    double tmp_medii_sum[MAX_SEM_FIS];
+    int tmp_scaderi[MAX_SEM_FIS];
+
+    memset(&student_temp, 0, sizeof(student_temp));
+    initializare_situatie(&student_temp.situatie);
+
+    for (i = 0; i < MAX_SEM_FIS; i++) {
+        tmp_credite_sum[i] = 0;
+        tmp_medii_sum[i] = 0.0;
+        tmp_scaderi[i] = 0;
+        for (j = 0; j < MAX_DISC_FIS; j++) {
+            tmp_note[i][j] = -1;
+            tmp_credite_det[i][j] = -1;
+        }
+    }
+
+    max_sem = 0;
+    max_disc = 0;
+    ok_linii = 0;
+    in_detalii = 0;
+    semestre_summary = 0;
+    nr_scadere = 0;
+
+    f = fopen(cale_fisier, "r");
+    if (f == NULL) {
+        return 0;
+    }
+
+    while (fgets(linie, sizeof(linie), f) != NULL) {
+        if (strncmp(linie, "=== Detalii discipline ===", 26) == 0) {
+            in_detalii = 1;
+            continue;
+        }
+
+        if (strncmp(linie, "Cod personal:", 13) == 0) {
+            sscanf(linie + 13, "%d", &student_temp.cod_personal);
+        } else if (strncmp(linie, "Nume:", 5) == 0) {
+            sscanf(linie + 5, "%49s", student_temp.nume);
+        } else if (strncmp(linie, "Prenume:", 8) == 0) {
+            sscanf(linie + 8, "%49s", student_temp.prenume);
+        } else if (strncmp(linie, "Varsta:", 7) == 0) {
+            sscanf(linie + 7, "%d", &student_temp.varsta);
+        } else if (strncmp(linie, "An studiu:", 10) == 0) {
+            sscanf(linie + 10, "%d", &student_temp.an_studiu);
+        } else if (strncmp(linie, "Grupa:", 6) == 0) {
+            sscanf(linie + 6, "%d", &student_temp.grupa);
+        } else if (strncmp(linie, "Email:", 6) == 0) {
+            sscanf(linie + 6, "%79s", student_temp.email);
+        } else if (strncmp(linie, "Bonus media:", 12) == 0) {
+            sscanf(linie + 12, "%lf", &student_temp.bonus_media);
+        } else if (strncmp(linie, "Semestrul", 9) == 0 && strstr(linie, "Medie ponderata:") != NULL) {
+            sem_idx = 0;
+            cred_sem = 0;
+            medie_sem = 0.0;
+            if (sscanf(linie, "Semestrul %d -> Credite: %d | Medie ponderata: %lf", &sem_idx, &cred_sem, &medie_sem) == 3) {
+                if (sem_idx >= 1 && sem_idx <= MAX_SEM_FIS) {
+                    tmp_credite_sum[sem_idx - 1] = cred_sem;
+                    tmp_medii_sum[sem_idx - 1] = medie_sem;
+                    if (sem_idx > semestre_summary) {
+                        semestre_summary = sem_idx;
+                    }
+                }
+            }
+        } else if (strncmp(linie, "Discipline cu peste 4 credite:", 29) == 0) {
+            sscanf(linie + 29, "%d", &student_temp.situatie.nr_discipline_peste_4_credite);
+        } else if (strncmp(linie, "Discipline picate sau absente:", 30) == 0) {
+            sscanf(linie + 30, "%d", &student_temp.situatie.nr_restante_absente);
+        } else if (strncmp(linie, "Semestre cu scadere:", 20) == 0) {
+            p = linie + 20;
+            while (*p != '\0') {
+                while (*p == ' ' || *p == '\t') {
+                    p++;
+                }
+                if (*p == '\0' || *p == '\n') {
+                    break;
+                }
+                if (strncmp(p, "niciunul", 8) == 0) {
+                    break;
+                }
+                sem_idx = (int)strtol(p, &endptr, 10);
+                if (endptr == p) {
+                    break;
+                }
+                if (nr_scadere < MAX_SEM_FIS) {
+                    tmp_scaderi[nr_scadere] = sem_idx;
+                    nr_scadere++;
+                }
+                p = endptr;
+            }
+        } else if (in_detalii) {
+            sem_idx = 0;
+            disc_idx = 0;
+            nota = -1;
+            credit = -1;
+            if (sscanf(linie, "Semestrul %d, Disciplina %d: Nota=%d Credite=%d", &sem_idx, &disc_idx, &nota, &credit) == 4) {
+                if (sem_idx >= 1 && sem_idx <= MAX_SEM_FIS && disc_idx >= 1 && disc_idx <= MAX_DISC_FIS) {
+                    tmp_note[sem_idx - 1][disc_idx - 1] = nota;
+                    tmp_credite_det[sem_idx - 1][disc_idx - 1] = credit;
+                    if (sem_idx > max_sem) {
+                        max_sem = sem_idx;
+                    }
+                    if (disc_idx > max_disc) {
+                        max_disc = disc_idx;
+                    }
+                    ok_linii = 1;
+                }
+            }
+        }
+    }
+
+    fclose(f);
+
+    if (student_temp.cod_personal <= 0 || student_temp.nume[0] == '\0' || student_temp.prenume[0] == '\0') {
+        return 0;
+    }
+
+    if (ok_linii && max_sem > 0 && max_disc > 0) {
+        student_temp.situatie.semestre = max_sem;
+        student_temp.situatie.discipline = max_disc;
+        student_temp.situatie.note = (int **)malloc((size_t)max_sem * sizeof(int *));
+        student_temp.situatie.credite = (int **)malloc((size_t)max_sem * sizeof(int *));
+        if (student_temp.situatie.note == NULL || student_temp.situatie.credite == NULL) {
+            elibereaza_situatie(&student_temp.situatie);
+            return 0;
+        }
+
+        for (i = 0; i < max_sem; i++) {
+            student_temp.situatie.note[i] = (int *)malloc((size_t)max_disc * sizeof(int));
+            student_temp.situatie.credite[i] = (int *)malloc((size_t)max_disc * sizeof(int));
+            if (student_temp.situatie.note[i] == NULL || student_temp.situatie.credite[i] == NULL) {
+                elibereaza_situatie(&student_temp.situatie);
+                return 0;
+            }
+            for (j = 0; j < max_disc; j++) {
+                student_temp.situatie.note[i][j] = tmp_note[i][j];
+                student_temp.situatie.credite[i][j] = tmp_credite_det[i][j];
+            }
+        }
+
+        calculeaza_indicatori_scolari(&student_temp.situatie);
+    } else if (semestre_summary > 0) {
+        student_temp.situatie.semestre = semestre_summary;
+        student_temp.situatie.discipline = 0;
+        student_temp.situatie.medii_ponderate = (double *)calloc((size_t)semestre_summary, sizeof(double));
+        student_temp.situatie.credite_semestru = (int *)calloc((size_t)semestre_summary, sizeof(int));
+        if (nr_scadere > 0) {
+            student_temp.situatie.semestre_scadere = (int *)calloc((size_t)nr_scadere, sizeof(int));
+        }
+
+        if (student_temp.situatie.medii_ponderate == NULL || student_temp.situatie.credite_semestru == NULL) {
+            elibereaza_situatie(&student_temp.situatie);
+            return 0;
+        }
+
+        for (i = 0; i < semestre_summary; i++) {
+            student_temp.situatie.medii_ponderate[i] = tmp_medii_sum[i];
+            student_temp.situatie.credite_semestru[i] = tmp_credite_sum[i];
+        }
+        student_temp.situatie.nr_semestre_scadere = nr_scadere;
+        if (student_temp.situatie.semestre_scadere != NULL) {
+            for (i = 0; i < nr_scadere; i++) {
+                student_temp.situatie.semestre_scadere[i] = tmp_scaderi[i];
+            }
+        }
+    }
+
+    if (!asigura_capacitate_studenti()) {
+        return 0;
+    }
+
+    studenti[nr_studenti] = student_temp;
+    nr_studenti++;
+
+    if (student_temp.cod_personal >= urmator_cod_personal) {
+        urmator_cod_personal = student_temp.cod_personal + 1;
+    }
+
+    return 1;
+}
+
+int incarca_studenti_din_fisiere(void) {
+    int an;
+    int grupa;
+    int total;
+
+#ifdef _WIN32
+    char pattern[128];
+    char cale_fisier[220];
+    WIN32_FIND_DATAA data;
+    HANDLE hfind;
+
+    total = 0;
+    for (an = 1; an <= 4; an++) {
+        for (grupa = 1; grupa <= 15; grupa++) {
+            snprintf(pattern, sizeof(pattern), "an_%d\\grupa_%d\\*.txt", an, grupa);
+            hfind = FindFirstFileA(pattern, &data);
+            if (hfind == INVALID_HANDLE_VALUE) {
+                continue;
+            }
+
+            do {
+                if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+                    snprintf(cale_fisier, sizeof(cale_fisier), "an_%d\\grupa_%d\\%s", an, grupa, data.cFileName);
+                    if (incarca_un_student_din_fisier(cale_fisier)) {
+                        total++;
+                    }
+                }
+            } while (FindNextFileA(hfind, &data));
+
+            FindClose(hfind);
+        }
+    }
+
+    return total;
+#else
+    total = 0;
+    (void)an;
+    (void)grupa;
+    return total;
+#endif
+}
+
+DateStudent *cauta_student_dupa_cod(int cod) {
+    int i;
+    for (i = 0; i < nr_studenti; i++) {
+        if (studenti[i].cod_personal == cod) {
+            return &studenti[i];
+        }
+    }
+    return NULL;
+}
+
+void calculeaza_indicatori_scolari(SituatieStudent *s) {
+    int sem, d;
+    int suma_credite;
+    int suma_produs;
+    int nota;
+    int credit;
+
+    if (s->note == NULL || s->credite == NULL || s->semestre <= 0 || s->discipline <= 0) {
+        return;
+    }
+
+    s->nr_discipline_peste_4_credite = 0;
+    s->nr_restante_absente = 0;
+    s->nr_semestre_scadere = 0;
+
+    free(s->medii_ponderate);
+    free(s->credite_semestru);
+    free(s->semestre_scadere);
+    s->medii_ponderate = (double *)calloc((size_t)s->semestre, sizeof(double));
+    s->credite_semestru = (int *)calloc((size_t)s->semestre, sizeof(int));
+    s->semestre_scadere = (int *)calloc((size_t)s->semestre, sizeof(int));
+
+    if (s->medii_ponderate == NULL || s->credite_semestru == NULL || s->semestre_scadere == NULL) {
+        printf("Eroare: memorie insuficienta la calculul indicatorilor.\n");
+        return;
+    }
+
+    for (sem = 0; sem < s->semestre; sem++) {
+        suma_credite = 0;
+        suma_produs = 0;
+
+        for (d = 0; d < s->discipline; d++) {
+            nota = s->note[sem][d];
+            credit = s->credite[sem][d];
+
+            if (nota == -1 || credit == -1) {
+                continue;
+            }
+            if (credit > 4) {
+                s->nr_discipline_peste_4_credite++;
+            }
+            if (nota >= 0 && nota < 5) {
+                s->nr_restante_absente++;
+            }
+
+            suma_credite += credit;
+            suma_produs += nota * credit;
+        }
+
+        s->credite_semestru[sem] = suma_credite;
+        s->medii_ponderate[sem] = (suma_credite > 0) ? (double)suma_produs / (double)suma_credite : 0.0;
+
+        if (sem > 0 && s->medii_ponderate[sem] < s->medii_ponderate[sem - 1]) {
+            s->semestre_scadere[s->nr_semestre_scadere++] = sem + 1;
+        }
+    }
+}
+
+void introdu_situatie_pentru_student(void) {
+    int cod;
+    int sem, d;
+    int nota;
+    int credit;
+    DateStudent *student;
+    SituatieStudent *s;
+
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti. Adauga mai intai un student.\n");
+        return;
+    }
+
+    printf("Introdu codul personal al studentului: ");
+    fflush(stdout);
+    scanf("%d", &cod);
+    student = cauta_student_dupa_cod(cod);
+    if (student == NULL) {
+        printf("Student inexistent.\n");
+        return;
+    }
+
+    s = &student->situatie;
+    elibereaza_situatie(s);
+
+    printf("Numar semestre incheiate: ");
+    fflush(stdout);
+    scanf("%d", &s->semestre);
+    printf("Numar discipline pe semestru: ");
+    fflush(stdout);
+    scanf("%d", &s->discipline);
+
+    if (s->semestre <= 0 || s->discipline <= 0) {
+        printf("Date invalide pentru situatie.\n");
+        initializare_situatie(s);
+        return;
+    }
+
+    s->note = (int **)malloc((size_t)s->semestre * sizeof(int *));
+    s->credite = (int **)malloc((size_t)s->semestre * sizeof(int *));
+    if (s->note == NULL || s->credite == NULL) {
+        printf("Eroare la alocarea matricilor.\n");
+        elibereaza_situatie(s);
+        return;
+    }
+
+    for (sem = 0; sem < s->semestre; sem++) {
+        s->note[sem] = (int *)malloc((size_t)s->discipline * sizeof(int));
+        s->credite[sem] = (int *)malloc((size_t)s->discipline * sizeof(int));
+        if (s->note[sem] == NULL || s->credite[sem] == NULL) {
+            printf("Eroare la alocarea liniilor matricii.\n");
+            elibereaza_situatie(s);
+            return;
+        }
+    }
+
+    printf("Pentru locurile libere introdu nota -1.\n");
+    for (sem = 0; sem < s->semestre; sem++) {
+        printf("\nSemestrul %d\n", sem + 1);
+        for (d = 0; d < s->discipline; d++) {
+            do {
+                printf("Nota disciplina %d (0..10 sau -1): ", d + 1);
+                fflush(stdout);
+                scanf("%d", &nota);
+            } while (!((nota >= 0 && nota <= 10) || nota == -1));
+
+            if (nota == -1) {
+                s->note[sem][d] = -1;
+                s->credite[sem][d] = -1;
+                continue;
+            }
+
+            do {
+                printf("Credite disciplina %d (1..30): ", d + 1);
+                fflush(stdout);
+                scanf("%d", &credit);
+            } while (credit < 1 || credit > 30);
+
+            s->note[sem][d] = nota;
+            s->credite[sem][d] = credit;
+        }
+    }
+
+    calculeaza_indicatori_scolari(s);
+    scrie_fisa_student(student);
+    printf("Situatia scolara a fost salvata pentru codul %d.\n", student->cod_personal);
+}
+
+void afiseaza_raport_student(void) {
+    int cod;
+    int sem, d;
+    int restante_sem;
+    int idx_restanta;
+    int suma_credite;
+    int suma_produs;
+    int credit_rest;
+    int punctaj_rest;
+    int credite_fara;
+    double medie_fara_restanta;
+    DateStudent *student;
+    SituatieStudent *s;
+    int are_date_detaliate;
+
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti.\n");
+        return;
+    }
+
+    printf("Introdu codul personal: ");
+    fflush(stdout);
+    scanf("%d", &cod);
+    student = cauta_student_dupa_cod(cod);
+    if (student == NULL) {
+        printf("Student inexistent.\n");
+        return;
+    }
+
+    s = &student->situatie;
+    if (s->semestre == 0 || s->medii_ponderate == NULL || s->credite_semestru == NULL) {
+        printf("Studentul nu are inca situatie scolara introdusa.\n");
+        return;
+    }
+
+    are_date_detaliate = (s->discipline > 0 && s->note != NULL && s->credite != NULL);
+    if (are_date_detaliate) {
+        calculeaza_indicatori_scolari(s);
+    }
+
+    printf("\n=== Raport situatia scolara ===\n");
+    printf("Student: %s %s (cod %d)\n", student->nume, student->prenume, student->cod_personal);
+    for (sem = 0; sem < s->semestre; sem++) {
+        printf(
+            "Semestrul %d -> Credite: %d | Medie ponderata: %.2f\n",
+            sem + 1,
+            s->credite_semestru[sem],
+            s->medii_ponderate[sem]
+        );
+    }
+
+    printf("Discipline cu peste 4 credite: %d\n", s->nr_discipline_peste_4_credite);
+    printf("Discipline picate sau absente: %d\n", s->nr_restante_absente);
+
+    if (s->nr_semestre_scadere == 0) {
+        printf("Nu exista scaderi de performanta intre semestre consecutive.\n");
+    } else {
+        printf("Semestre cu scadere de performanta: ");
+        for (sem = 0; sem < s->nr_semestre_scadere; sem++) {
+            printf("%d ", s->semestre_scadere[sem]);
+        }
+        printf("\n");
+    }
+
+    if (!are_date_detaliate) {
+        printf("Detaliul influentei unei singure restante este disponibil dupa salvarea notelor/creditelor pe discipline.\n");
+        return;
+    }
+
+    for (sem = 0; sem < s->semestre; sem++) {
+        restante_sem = 0;
+        idx_restanta = -1;
+        suma_credite = 0;
+        suma_produs = 0;
+
+        for (d = 0; d < s->discipline; d++) {
+            if (s->note[sem][d] == -1 || s->credite[sem][d] == -1) {
+                continue;
+            }
+            suma_credite += s->credite[sem][d];
+            suma_produs += s->note[sem][d] * s->credite[sem][d];
+            if (s->note[sem][d] >= 0 && s->note[sem][d] < 5) {
+                restante_sem++;
+                idx_restanta = d;
+            }
+        }
+
+        if (restante_sem == 1 && idx_restanta >= 0) {
+            credit_rest = s->credite[sem][idx_restanta];
+            punctaj_rest = s->note[sem][idx_restanta] * credit_rest;
+            credite_fara = suma_credite - credit_rest;
+            medie_fara_restanta = (credite_fara > 0) ? (double)(suma_produs - punctaj_rest) / (double)credite_fara : 0.0;
+
+            printf(
+                "Semestrul %d are exact o restanta/absenta. Medie curenta %.2f, medie fara disciplina respectiva %.2f\n",
+                sem + 1,
+                s->medii_ponderate[sem],
+                medie_fara_restanta
+            );
+        }
+    }
+}
+
+double media_generala_fara_bonus(const DateStudent *student) {
+    int sem;
+    double suma = 0.0;
+    int count = 0;
+    const SituatieStudent *s = &student->situatie;
+
+    if (s->medii_ponderate == NULL || s->semestre == 0) {
+        return 0.0;
+    }
+
+    for (sem = 0; sem < s->semestre; sem++) {
+        if (s->credite_semestru != NULL && s->credite_semestru[sem] > 0) {
+            suma += s->medii_ponderate[sem];
+            count++;
+        }
+    }
+
+    return (count > 0) ? (suma / (double)count) : 0.0;
+}
+
+double media_generala(const DateStudent *student) {
+    double suma = media_generala_fara_bonus(student);
+    suma += student->bonus_media;
+    if (suma > 10.0) {
+        suma = 10.0;
+    }
+    return suma;
+}
+
+void verifica_bonus_media_student(void) {
+    int cod;
+    DateStudent *student;
+    double media_fara_bonus;
+    double media_cu_bonus;
+
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti inregistrati.\n");
+        return;
+    }
+
+    printf("Introdu codul personal al studentului (0=Cancel): ");
+    fflush(stdout);
+    scanf("%d", &cod);
+    if (cod == 0) {
+        printf("Verificare anulata.\n");
+        return;
+    }
+
+    student = cauta_student_dupa_cod(cod);
+    if (student == NULL) {
+        printf("Student inexistent.\n");
+        return;
+    }
+
+    media_fara_bonus = media_generala_fara_bonus(student);
+    media_cu_bonus = media_generala(student);
+
+    printf("\n=== Verificare bonus media ===\n");
+    printf("Student: %s %s (cod %d)\n", student->nume, student->prenume, student->cod_personal);
+    printf("Media fara bonus: %.2f\n", media_fara_bonus);
+    printf("Bonus acumulat: +%.2f\n", student->bonus_media);
+    printf("Media finala (cu bonus): %.2f\n", media_cu_bonus);
+
+    if (media_cu_bonus > media_fara_bonus) {
+        printf("Verificare: DA, media a crescut.\n");
+    } else {
+        printf("Verificare: NU, media nu a crescut.\n");
+    }
+}
+
+void joaca_ruleta_ruseasca(void) {
+    int nr_participanti;
+    int nr_eligibili;
+    int *pool;
+    int *participanti;
+    int *activ;
+    int *eliminati_runda;
+    int i;
+    int j;
+    int temp;
+    int activi;
+    int runda;
+    int eliminati_count;
+    int castigator_idx_participant;
+    int castigator_idx_student;
+
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti inregistrati pentru joc.\n");
+        return;
+    }
+
+    nr_eligibili = 0;
+    for (i = 0; i < nr_studenti; i++) {
+        if (studenti[i].bonus_media <= 0.0001) {
+            nr_eligibili++;
+        }
+    }
+
+    if (nr_eligibili == 0) {
+        printf("Nu exista studenti eligibili: toti au deja bonus si nu pot intra la ruleta.\n");
+        return;
+    }
+
+    printf("\n=== Ruleta ruseasca (mod distractie) ===\n");
+    printf("Studenti eligibili (fara bonus): %d din %d\n", nr_eligibili, nr_studenti);
+    printf("Numar participanti (1..%d, 0=Cancel): ", nr_eligibili);
+    fflush(stdout);
+    scanf("%d", &nr_participanti);
+
+    if (nr_participanti == 0) {
+        printf("Joc anulat. Revenire la meniul principal.\n");
+        return;
+    }
+    if (nr_participanti < 1 || nr_participanti > nr_eligibili) {
+        printf("Numar invalid de participanti.\n");
+        return;
+    }
+
+    pool = (int *)malloc((size_t)nr_eligibili * sizeof(int));
+    participanti = (int *)malloc((size_t)nr_participanti * sizeof(int));
+    activ = (int *)malloc((size_t)nr_participanti * sizeof(int));
+    eliminati_runda = (int *)malloc((size_t)nr_participanti * sizeof(int));
+    if (pool == NULL || participanti == NULL || activ == NULL || eliminati_runda == NULL) {
+        printf("Eroare: memorie insuficienta pentru joc.\n");
+        free(pool);
+        free(participanti);
+        free(activ);
+        free(eliminati_runda);
+        return;
+    }
+
+    j = 0;
+    for (i = 0; i < nr_studenti; i++) {
+        if (studenti[i].bonus_media <= 0.0001) {
+            pool[j++] = i;
+        }
+    }
+
+    for (i = nr_eligibili - 1; i > 0; i--) {
+        j = rand() % (i + 1);
+        temp = pool[i];
+        pool[i] = pool[j];
+        pool[j] = temp;
+    }
+
+    printf("Participanti selectati aleator:\n");
+    for (i = 0; i < nr_participanti; i++) {
+        participanti[i] = pool[i];
+        activ[i] = 1;
+        printf(
+            "%d. Cod %d | %s %s\n",
+            i + 1,
+            studenti[participanti[i]].cod_personal,
+            studenti[participanti[i]].nume,
+            studenti[participanti[i]].prenume
+        );
+    }
+
+    activi = nr_participanti;
+    runda = 1;
+
+    while (activi > 1) {
+        eliminati_count = 0;
+        printf("\nRunda %d:\n", runda);
+
+        for (i = 0; i < nr_participanti; i++) {
+            int glont;
+            if (!activ[i]) {
+                continue;
+            }
+
+            glont = rand() % 6;
+            if (glont == 0) {
+                activ[i] = 0;
+                activi--;
+                eliminati_runda[eliminati_count++] = i;
+                printf("- %s %s a fost eliminat.\n", studenti[participanti[i]].nume, studenti[participanti[i]].prenume);
+            } else {
+                printf("- %s %s a supravietuit rundei.\n", studenti[participanti[i]].nume, studenti[participanti[i]].prenume);
+            }
+        }
+
+        if (activi == 0 && eliminati_count > 0) {
+            castigator_idx_participant = eliminati_runda[rand() % eliminati_count];
+            activ[castigator_idx_participant] = 1;
+            activi = 1;
+            printf("Toti au iesit in aceeasi runda; noroc extrem: %s %s revine in joc ca ultim supravietuitor.\n",
+                   studenti[participanti[castigator_idx_participant]].nume,
+                   studenti[participanti[castigator_idx_participant]].prenume);
+            break;
+        }
+
+        runda++;
+    }
+
+    castigator_idx_participant = -1;
+    for (i = 0; i < nr_participanti; i++) {
+        if (activ[i]) {
+            castigator_idx_participant = i;
+            break;
+        }
+    }
+
+    if (castigator_idx_participant >= 0) {
+        castigator_idx_student = participanti[castigator_idx_participant];
+        studenti[castigator_idx_student].bonus_media += 0.25;
+        scrie_fisa_student(&studenti[castigator_idx_student]);
+        printf(
+            "\nCastigator: %s %s (cod %d). Bonus acordat: +0.25 la media generala. Media actuala: %.2f\n",
+            studenti[castigator_idx_student].nume,
+            studenti[castigator_idx_student].prenume,
+            studenti[castigator_idx_student].cod_personal,
+            media_generala(&studenti[castigator_idx_student])
+        );
+    } else {
+        printf("Nu s-a putut determina un castigator.\n");
+    }
+
+    free(pool);
+    free(participanti);
+    free(activ);
+    free(eliminati_runda);
+}
+
+void afiseaza_clasament_dupa_medie(void) {
+    int i, j;
+    int *selectat;
+    int best;
+    double best_medie;
+    double mg;
+    if (nr_studenti == 0) {
+        printf("Nu exista studenti pentru clasament.\n");
+        return;
+    }
+
+    for (i = 0; i < nr_studenti; i++) {
+        if (studenti[i].situatie.semestre > 0 && studenti[i].situatie.note != NULL && studenti[i].situatie.credite != NULL) {
+            calculeaza_indicatori_scolari(&studenti[i].situatie);
+        }
+    }
+
+    selectat = (int *)calloc((size_t)nr_studenti, sizeof(int));
+    if (selectat == NULL) {
+        printf("Eroare: memorie insuficienta pentru clasament.\n");
+        return;
+    }
+
+    printf("\n=== Clasament studenti dupa media generala ===\n");
+    for (i = 0; i < nr_studenti; i++) {
+        best = -1;
+        best_medie = -1.0;
+        for (j = 0; j < nr_studenti; j++) {
+            if (selectat[j]) {
+                continue;
+            }
+            mg = media_generala(&studenti[j]);
+            if (mg > best_medie) {
+                best_medie = mg;
+                best = j;
+            }
+        }
+
+        if (best != -1) {
+            printf(
+                "%d. Cod %d | %s %s | Media generala %.2f\n",
+                i + 1,
+                studenti[best].cod_personal,
+                studenti[best].nume,
+                studenti[best].prenume,
+                best_medie
+            );
+            selectat[best] = 1;
+        }
+    }
+
+    free(selectat);
+}
+
+int main(void) {
+    int optiune;
+    int incarcati;
+
+    srand((unsigned int)time(NULL));
+
+    incarcati = incarca_studenti_din_fisiere();
+    if (incarcati > 0) {
+        printf("Au fost incarcati %d studenti din fisiere.\n", incarcati);
+    }
+
+    do {
+        printf("\n===== MENIU PRINCIPAL =====\n");
+        printf("1. Adauga studenti\n");
+        printf("2. Afiseaza studenti\n");
+        printf("3. Introdu/actualizeaza situatie scolara pentru un student\n");
+        printf("4. Afiseaza raport situatie scolara pentru un student\n");
+        printf("5. Aranjeaza studentii dupa media generala\n");
+        printf("6. Cauta student dupa nume/prenume\n");
+        printf("7. Deschide mod grafic medii pentru un student\n");
+        printf("8. Sterge student\n");
+        printf("9. Joc: ruleta ruseasca (bonus +0.25)\n");
+        printf("10. Verifica bonusul la media unui student\n");
+        printf("0. Exit\n");
+        printf("Alege optiunea: ");
+        fflush(stdout);
+        scanf("%d", &optiune);
+
+        switch (optiune) {
+            case 1:
+                adaugare_studenti();
+                break;
+            case 2:
+                afisare_studenti();
+                break;
+            case 3:
+                introdu_situatie_pentru_student();
+                break;
+            case 4:
+                afiseaza_raport_student();
+                break;
+            case 5:
+                afiseaza_clasament_dupa_medie();
+                break;
+            case 6:
+                cauta_student_dupa_nume_prenume();
+                break;
+            case 7:
+                deschide_mod_grafic_student();
+                break;
+            case 8:
+                sterge_student();
+                break;
+            case 9:
+                joaca_ruleta_ruseasca();
+                break;
+            case 10:
+                verifica_bonus_media_student();
+                break;
+            case 0:
+                elibereaza_toata_memoria();
+                printf("Program inchis.\n");
+                break;
+            default:
+                printf("Optiune invalida. Incearca din nou.\n");
+                break;
+        }
+    } while (optiune != 0);
+
+    return 0;
+}
