@@ -63,6 +63,9 @@ int incarca_medii_din_fisier(StudentMedii *s, const char *cale_fisier) {
     int count;
     char *p;
     float medie;
+    int cod_temp;
+    char nume_temp[50];
+    char prenume_temp[50];
 
     f = fopen(cale_fisier, "r");
     if (f == NULL) {
@@ -71,8 +74,38 @@ int incarca_medii_din_fisier(StudentMedii *s, const char *cale_fisier) {
 
     memset(s, 0, sizeof(*s));
     count = 0;
+    strcpy(s->nume, "Student");
+    strcpy(s->prenume, "");
+    s->cod = 0;
+
+    cod_temp = 0;
+    nume_temp[0] = '\0';
+    prenume_temp[0] = '\0';
 
     while (fgets(linie, sizeof(linie), f) != NULL) {
+        if (strncmp(linie, "Cod personal:", 13) == 0) {
+            if (sscanf(linie + 13, "%d", &cod_temp) == 1) {
+                s->cod = cod_temp;
+            }
+            continue;
+        }
+
+        if (strncmp(linie, "Nume:", 5) == 0) {
+            if (sscanf(linie + 5, "%49s", nume_temp) == 1) {
+                strncpy(s->nume, nume_temp, sizeof(s->nume) - 1);
+                s->nume[sizeof(s->nume) - 1] = '\0';
+            }
+            continue;
+        }
+
+        if (strncmp(linie, "Prenume:", 8) == 0) {
+            if (sscanf(linie + 8, "%49s", prenume_temp) == 1) {
+                strncpy(s->prenume, prenume_temp, sizeof(s->prenume) - 1);
+                s->prenume[sizeof(s->prenume) - 1] = '\0';
+            }
+            continue;
+        }
+
         p = strstr(linie, "Medie ponderata:");
         if (p != NULL) {
             p += (int)strlen("Medie ponderata:");
@@ -92,9 +125,6 @@ int incarca_medii_din_fisier(StudentMedii *s, const char *cale_fisier) {
     }
 
     s->count = count;
-    strcpy(s->nume, "Student");
-    strcpy(s->prenume, "");
-    s->cod = 0;
     return 1;
 }
 
@@ -212,12 +242,12 @@ void draw_ui_panel(void) {
 
     if (g_model.mod_afisare == 0) {
         if (g_model.mod_interactiune == 0) {
-            draw_text(20.0f, 50.0f, GLUT_BITMAP_HELVETICA_12, "MOD: EDITARE [A/D] selectie [W/S] ±medie [C] sort asc [V] sort desc [R] reset [T] comparare [E] statistici [ESC] iesire");
+            draw_text(20.0f, 50.0f, GLUT_BITMAP_HELVETICA_12, "MOD: EDITARE [A/D sau ←/→] selectie [W/S] ±medie [C] sort asc [V] sort desc [R] reset [T] comparare [E] statistici [ESC] iesire");
         } else {
             draw_text(20.0f, 50.0f, GLUT_BITMAP_HELVETICA_12, "MOD: STATISTICI [E] editare [T] comparare [ESC] iesire");
         }
     } else {
-        draw_text(20.0f, 50.0f, GLUT_BITMAP_HELVETICA_12, "[←/→] : selecteaza student | [T] : single view | [ESC] : iesire");
+        draw_text(20.0f, 50.0f, GLUT_BITMAP_HELVETICA_12, "[A/D sau ,/. sau ←/→] : selecteaza student | [T] : single view | [ESC] : iesire");
     }
 }
 
@@ -510,6 +540,51 @@ void key_normal(unsigned char key, int x, int y) {
                 calculeaza_statistici(&g_model);
             }
             break;
+        case 'a':
+        case 'A':
+            if (g_model.mod_afisare == 0) {
+                g_model.selectat_medie--;
+                if (g_model.selectat_medie < 0) {
+                    g_model.selectat_medie = g_model.studenti[g_model.selectat_student].count - 1;
+                }
+            } else {
+                g_model.selectat_student--;
+                if (g_model.selectat_student < 0) {
+                    g_model.selectat_student = g_model.nr_studenti - 1;
+                }
+            }
+            break;
+        case 'd':
+        case 'D':
+            if (g_model.mod_afisare == 0) {
+                g_model.selectat_medie++;
+                if (g_model.selectat_medie >= g_model.studenti[g_model.selectat_student].count) {
+                    g_model.selectat_medie = 0;
+                }
+            } else {
+                g_model.selectat_student++;
+                if (g_model.selectat_student >= g_model.nr_studenti) {
+                    g_model.selectat_student = 0;
+                }
+            }
+            break;
+        case ',':
+            if (g_model.mod_afisare == 1) {
+                g_model.selectat_student--;
+                if (g_model.selectat_student < 0) {
+                    g_model.selectat_student = g_model.nr_studenti - 1;
+                }
+            }
+            break;
+        case '.':
+        case '/':
+            if (g_model.mod_afisare == 1) {
+                g_model.selectat_student++;
+                if (g_model.selectat_student >= g_model.nr_studenti) {
+                    g_model.selectat_student = 0;
+                }
+            }
+            break;
         default:
             break;
     }
@@ -567,6 +642,16 @@ int citeste_medii_initiale(StudentMedii *s) {
         return 0;
     }
 
+    printf("Nume: ");
+    if (scanf("%49s", s->nume) != 1) {
+        return 0;
+    }
+    printf("Prenume: ");
+    if (scanf("%49s", s->prenume) != 1) {
+        return 0;
+    }
+    s->cod = 0;
+
     for (i = 0; i < s->count; i++) {
         printf("Media semestrul %d (0..10): ", i + 1);
         if (scanf("%f", &s->valori[i]) != 1) {
@@ -579,9 +664,6 @@ int citeste_medii_initiale(StudentMedii *s) {
         s->initiale[i] = s->valori[i];
     }
 
-    strcpy(s->nume, "Student");
-    strcpy(s->prenume, "");
-    s->cod = 0;
     return 1;
 }
 

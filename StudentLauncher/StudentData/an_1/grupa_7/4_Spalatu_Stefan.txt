@@ -1,0 +1,27 @@
+=== Fisa student ===
+Cod personal: 4
+Nume: Spalatu
+Prenume: Stefan
+Varsta: 20
+An studiu: 1
+Grupa: 7
+Email: stefan.spalatu@student.tuiasi.ro
+
+=== Situatie scolara ===
+Semestrul 1 -> Credite: 7 | Medie ponderata: 7.29
+Semestrul 2 -> Credite: 7 | Medie ponderata: 8.86
+Semestrul 3 -> Credite: 6 | Medie ponderata: 8.00
+Discipline cu peste 4 credite: 0
+Discipline picate sau absente: 0
+Semestre cu scadere: 3 
+
+=== Detalii discipline ===
+Semestrul 1, Disciplina 1: Nota=6 Credite=2
+Semestrul 1, Disciplina 2: Nota=7 Credite=3
+Semestrul 1, Disciplina 3: Nota=9 Credite=2
+Semestrul 2, Disciplina 1: Nota=10 Credite=3
+Semestrul 2, Disciplina 2: Nota=7 Credite=2
+Semestrul 2, Disciplina 3: Nota=9 Credite=2
+Semestrul 3, Disciplina 1: Nota=7 Credite=2
+Semestrul 3, Disciplina 2: Nota=8 Credite=2
+Semestrul 3, Disciplina 3: Nota=9 Credite=2

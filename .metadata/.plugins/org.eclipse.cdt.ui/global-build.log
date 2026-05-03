@@ -1,6 +1,8 @@
-18:28:06 **** Rebuild of configuration Debug for project StudentLauncher ****
+13:00:35 **** Incremental Build of configuration Debug for project StudentLauncher ****
 Info: Internal Builder is used for build
-gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\h.o" "..\\src\\h.c" 
-gcc -o StudentLauncher.exe "src\\h.o" 
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\student_io.o" "..\\src\\student_io.c" 
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\gui_launcher.o" "..\\src\\gui_launcher.c" 
+gcc -o StudentLauncher.exe "src\\gui_launcher.o" "src\\main.o" "src\\student_io.o" "src\\student_logic.o" "src\\utils.o" 
+Info: Nothing to build for StudentLauncher
 Info: Nothing to build for StudentLauncher
 Info: Nothing to build for StudentLauncher
