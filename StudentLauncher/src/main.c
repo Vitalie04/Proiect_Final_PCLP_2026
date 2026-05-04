@@ -9,15 +9,33 @@
 
 #define printf(...) do { fprintf(stdout, __VA_ARGS__); fflush(stdout); } while (0)
 
+static void initializare_storage(StudentStorage *storage) {
+    storage->studenti = NULL;
+    storage->nr_studenti = 0;
+    storage->capacitate_studenti = 0;
+    storage->urmator_cod_personal = 1;
+}
+
+static void afiseaza_meniul_principal(void) {
+    printf("\n===== MENIU =====\n");
+    printf("1. Adauga studenti\n");
+    printf("2. Afiseaza studenti\n");
+    printf("3. Introdu situatie scolara\n");
+    printf("4. Raport situatie scolara\n");
+    printf("5. Clasament dupa medie\n");
+    printf("6. Cauta student dupa nume/prenume\n");
+    printf("7. Mod grafic medii\n");
+    printf("8. Sterge student\n");
+    printf("0. Exit\n");
+    printf("Alege optiunea: ");
+}
+
 int main(void) {
     int optiune;
     int incarcati;
     StudentStorage storage;
 
-    storage.studenti = NULL;
-    storage.nr_studenti = 0;
-    storage.capacitate_studenti = 0;
-    storage.urmator_cod_personal = 1;
+    initializare_storage(&storage);
 
     srand((unsigned int)time(NULL));
 
@@ -27,17 +45,7 @@ int main(void) {
     }
 
     do {
-        printf("\n===== MENIU =====\n");
-        printf("1. Adauga studenti\n");
-        printf("2. Afiseaza studenti\n");
-        printf("3. Introdu situatie scolara\n");
-        printf("4. Raport situatie scolara\n");
-        printf("5. Clasament dupa medie\n");
-        printf("6. Cauta student dupa nume/prenume\n");
-        printf("7. Mod grafic medii\n");
-        printf("8. Sterge student\n");
-        printf("0. Exit\n");
-        printf("Alege optiunea: ");
+        afiseaza_meniul_principal();
         scanf("%d", &optiune);
 
         switch (optiune) {

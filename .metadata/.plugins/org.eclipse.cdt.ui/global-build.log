@@ -1,8 +1,23 @@
-13:00:35 **** Incremental Build of configuration Debug for project StudentLauncher ****
+23:48:02 **** Rebuild of configuration Debug for project medii_opengl ****
 Info: Internal Builder is used for build
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\medii_opengl.o" "..\\src\\medii_opengl.c" 
+..\src\medii_opengl.c: In function 'main':
+..\src\medii_opengl.c:672:17: warning: variable 'cale_fisier' set but not used [-Wunused-but-set-variable]
+  672 |     const char *cale_fisier;
+      |                 ^~~~~~~~~~~
+gcc -o medii_opengl.exe "src\\medii_opengl.o" -lfreeglut -lglu32 -lgdi32 -lopengl32 -lwinmm 
+23:48:10 **** Incremental Build of configuration Debug for project StudentLauncher ****
+Info: Internal Builder is used for build
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\main.o" "..\\src\\main.c" 
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\utils.o" "..\\src\\utils.c" 
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\student_logic.o" "..\\src\\student_logic.c" 
 gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\student_io.o" "..\\src\\student_io.c" 
+..\src\student_io.c:25:12: warning: 'are_extensie_txt' defined but not used [-Wunused-function]
+   25 | static int are_extensie_txt(const char *nume_fisier) {
+      |            ^~~~~~~~~~~~~~~~
 gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\gui_launcher.o" "..\\src\\gui_launcher.c" 
+..\src\gui_launcher.c: In function 'deschide_mod_grafic_student':
+..\src\gui_launcher.c:126:9: warning: unused variable 'j' [-Wunused-variable]
+  126 |     int j;
+      |         ^
 gcc -o StudentLauncher.exe "src\\gui_launcher.o" "src\\main.o" "src\\student_io.o" "src\\student_logic.o" "src\\utils.o" 
-Info: Nothing to build for StudentLauncher
-Info: Nothing to build for StudentLauncher
-Info: Nothing to build for StudentLauncher

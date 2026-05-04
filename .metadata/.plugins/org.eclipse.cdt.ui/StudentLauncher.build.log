@@ -1,1 +1,18 @@
-Info: Nothing to build for StudentLauncher
+23:48:10 **** Incremental Build of configuration Debug for project StudentLauncher ****
+Info: Internal Builder is used for build
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\main.o" "..\\src\\main.c" 
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\utils.o" "..\\src\\utils.c" 
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\student_logic.o" "..\\src\\student_logic.c" 
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\student_io.o" "..\\src\\student_io.c" 
+..\src\student_io.c:25:12: warning: 'are_extensie_txt' defined but not used [-Wunused-function]
+   25 | static int are_extensie_txt(const char *nume_fisier) {
+      |            ^~~~~~~~~~~~~~~~
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\gui_launcher.o" "..\\src\\gui_launcher.c" 
+..\src\gui_launcher.c: In function 'deschide_mod_grafic_student':
+..\src\gui_launcher.c:126:9: warning: unused variable 'j' [-Wunused-variable]
+  126 |     int j;
+      |         ^
+gcc -o StudentLauncher.exe "src\\gui_launcher.o" "src\\main.o" "src\\student_io.o" "src\\student_logic.o" "src\\utils.o" 
+
+23:48:16 Build Finished. 0 errors, 2 warnings. (took 5s.148ms)
+

@@ -6,11 +6,20 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
-void obtine_cale_executabil(char *buffer, size_t dim_buffer) {
+static void taie_dupa_ultimul_sep(char *cale, char sep) {
     char *ultim_sep;
 
+    ultim_sep = strrchr(cale, sep);
+    if (ultim_sep != NULL) {
+        *ultim_sep = '\0';
+    }
+}
+
+void obtine_cale_executabil(char *buffer, size_t dim_buffer) {
     if (buffer == NULL || dim_buffer == 0) {
         return;
     }
@@ -22,16 +31,21 @@ void obtine_cale_executabil(char *buffer, size_t dim_buffer) {
         return;
     }
     buffer[dim_buffer - 1] = '\0';
-
-    ultim_sep = strrchr(buffer, '\\');
-    if (ultim_sep != NULL) {
-        *ultim_sep = '\0';
-    }
 #else
-    (void)ultim_sep;
-    strncpy(buffer, ".", dim_buffer - 1);
-    buffer[dim_buffer - 1] = '\0';
+    ssize_t len;
+
+    len = readlink("/proc/self/exe", buffer, dim_buffer - 1);
+    if (len < 0) {
+        strncpy(buffer, ".", dim_buffer - 1);
+        buffer[dim_buffer - 1] = '\0';
+        return;
+    }
+
+    buffer[len] = '\0';
 #endif
+
+    taie_dupa_ultimul_sep(buffer, '\\');
+    taie_dupa_ultimul_sep(buffer, '/');
 }
 
 int egal_ignore_case(const char *a, const char *b) {
@@ -47,7 +61,6 @@ int egal_ignore_case(const char *a, const char *b) {
 
 void obtine_cale_date_studenti(char *buffer, size_t dim_buffer) {
     char dir_executabil[512];
-    char *ultim_sep;
     int scris;
 
     if (buffer == NULL || dim_buffer == 0) {
@@ -58,20 +71,22 @@ void obtine_cale_date_studenti(char *buffer, size_t dim_buffer) {
     obtine_cale_executabil(dir_executabil, sizeof(dir_executabil));
 
     while (1) {
-        ultim_sep = strrchr(dir_executabil, '\\');
-        if (ultim_sep == NULL) {
+        char *ultimul_fol;
+
+        ultimul_fol = strrchr(dir_executabil, '\\');
+        if (ultimul_fol == NULL) {
             break;
         }
 
-        *ultim_sep = '\0';
-        ultim_sep = strrchr(dir_executabil, '\\');
-        if (ultim_sep == NULL) {
+        *ultimul_fol = '\0';
+        ultimul_fol = strrchr(dir_executabil, '\\');
+        if (ultimul_fol == NULL) {
             break;
         }
 
-        if (egal_ignore_case(ultim_sep + 1, "Debug") ||
-            egal_ignore_case(ultim_sep + 1, "Release") ||
-            egal_ignore_case(ultim_sep + 1, "src")) {
+        if (egal_ignore_case(ultimul_fol + 1, "Debug") ||
+            egal_ignore_case(ultimul_fol + 1, "Release") ||
+            egal_ignore_case(ultimul_fol + 1, "src")) {
             continue;
         }
 
@@ -83,9 +98,8 @@ void obtine_cale_date_studenti(char *buffer, size_t dim_buffer) {
         buffer[dim_buffer - 1] = '\0';
     }
 #else
-    (void)dir_executabil;
-    (void)ultim_sep;
-    strncpy(buffer, "StudentData", dim_buffer - 1);
+    obtine_cale_executabil(dir_executabil, sizeof(dir_executabil));
+    snprintf(buffer, dim_buffer, "%s/StudentData", dir_executabil);
     buffer[dim_buffer - 1] = '\0';
 #endif
 }

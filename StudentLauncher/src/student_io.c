@@ -9,15 +9,53 @@
 #include <direct.h>
 #include <windows.h>
 #define MKDIR(path) _mkdir(path)
+#define PATH_SEP '\\'
 #else
+#include <dirent.h>
 #include <sys/stat.h>
 #define MKDIR(path) mkdir(path, 0777)
+#define PATH_SEP '/'
 #endif
 
 #include "student_logic.h"
 #include "utils.h"
 
 #define printf(...) do { fprintf(stdout, __VA_ARGS__); fflush(stdout); } while (0)
+
+static int are_extensie_txt(const char *nume_fisier) {
+    size_t len;
+    if (nume_fisier == NULL) {
+        return 0;
+    }
+
+    len = strlen(nume_fisier);
+    if (len < 4) {
+        return 0;
+    }
+
+    return strcmp(nume_fisier + len - 4, ".txt") == 0;
+}
+
+static void construieste_director_an(char *dest, size_t dim_dest, const char *baza, int an) {
+    snprintf(dest, dim_dest, "%s%can_%d", baza, PATH_SEP, an);
+}
+
+static void construieste_director_grupa(char *dest, size_t dim_dest, const char *baza, int an, int grupa) {
+    snprintf(dest, dim_dest, "%s%can_%d%cgrupa_%d", baza, PATH_SEP, an, PATH_SEP, grupa);
+}
+
+static void construieste_fisier_student(
+    char *dest,
+    size_t dim_dest,
+    const char *baza,
+    int an,
+    int grupa,
+    int cod,
+    const char *primul,
+    const char *al_doilea
+) {
+    snprintf(dest, dim_dest, "%s%can_%d%cgrupa_%d%c%d_%s_%s.txt", baza, PATH_SEP, an, PATH_SEP, grupa, PATH_SEP, cod, primul, al_doilea);
+}
 
 int creeaza_director_daca_lipseste(const char *cale) {
     if (MKDIR(cale) == 0) {
@@ -48,8 +86,8 @@ void scrie_fisa_student(DateStudent *student) {
     SituatieStudent *s = &student->situatie;
 
     obtine_cale_date_studenti(director_baza, sizeof(director_baza));
-    snprintf(director_an, sizeof(director_an), "%s\\an_%d", director_baza, student->an_studiu);
-    snprintf(director_grupa, sizeof(director_grupa), "%s\\grupa_%d", director_an, student->grupa);
+    construieste_director_an(director_an, sizeof(director_an), director_baza, student->an_studiu);
+    construieste_director_grupa(director_grupa, sizeof(director_grupa), director_baza, student->an_studiu, student->grupa);
 
     if (!creeaza_director_daca_lipseste(director_baza) ||
         !creeaza_director_daca_lipseste(director_an) ||
@@ -61,8 +99,9 @@ void scrie_fisa_student(DateStudent *student) {
     snprintf(
         fisier,
         sizeof(fisier),
-        "%s\\%d_%s_%s.txt",
+        "%s%c%d_%s_%s.txt",
         director_grupa,
+        PATH_SEP,
         student->cod_personal,
         student->nume,
         student->prenume
@@ -198,10 +237,9 @@ void sterge_student(StudentStorage *storage) {
     student = &storage->studenti[idx];
 
     obtine_cale_date_studenti(baza_date, sizeof(baza_date));
-    snprintf(
+    construieste_fisier_student(
         fisier,
         sizeof(fisier),
-        "%s\\an_%d\\grupa_%d\\%d_%s_%s.txt",
         baza_date,
         student->an_studiu,
         student->grupa,
@@ -436,6 +474,7 @@ int incarca_studenti_din_fisiere(StudentStorage *storage) {
 
 #ifdef _WIN32
     char baza_date[256];
+    char director_grupa[512];
     char pattern[512];
     char cale_fisier[512];
     WIN32_FIND_DATAA data;
@@ -446,7 +485,8 @@ int incarca_studenti_din_fisiere(StudentStorage *storage) {
     total = 0;
     for (an = 1; an <= 4; an++) {
         for (grupa = 1; grupa <= 15; grupa++) {
-            snprintf(pattern, sizeof(pattern), "%s\\an_%d\\grupa_%d\\*.txt", baza_date, an, grupa);
+            construieste_director_grupa(director_grupa, sizeof(director_grupa), baza_date, an, grupa);
+            snprintf(pattern, sizeof(pattern), "%s%c*.txt", director_grupa, PATH_SEP);
             hfind = FindFirstFileA(pattern, &data);
             if (hfind == INVALID_HANDLE_VALUE) {
                 continue;
@@ -454,7 +494,7 @@ int incarca_studenti_din_fisiere(StudentStorage *storage) {
 
             do {
                 if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
-                    snprintf(cale_fisier, sizeof(cale_fisier), "%s\\an_%d\\grupa_%d\\%s", baza_date, an, grupa, data.cFileName);
+                    snprintf(cale_fisier, sizeof(cale_fisier), "%s%c%s", director_grupa, PATH_SEP, data.cFileName);
                     if (incarca_un_student_din_fisier(cale_fisier, storage)) {
                         total++;
                     }
@@ -467,10 +507,41 @@ int incarca_studenti_din_fisiere(StudentStorage *storage) {
 
     return total;
 #else
+    char baza_date[256];
+    char director_grupa[512];
+    char cale_fisier[768];
+    DIR *dir;
+    struct dirent *entry;
+
+    obtine_cale_date_studenti(baza_date, sizeof(baza_date));
+
     total = 0;
-    (void)an;
-    (void)grupa;
-    (void)storage;
+    for (an = 1; an <= 4; an++) {
+        for (grupa = 1; grupa <= 15; grupa++) {
+            construieste_director_grupa(director_grupa, sizeof(director_grupa), baza_date, an, grupa);
+            dir = opendir(director_grupa);
+            if (dir == NULL) {
+                continue;
+            }
+
+            while ((entry = readdir(dir)) != NULL) {
+                if (entry->d_name[0] == '.') {
+                    continue;
+                }
+                if (!are_extensie_txt(entry->d_name)) {
+                    continue;
+                }
+
+                snprintf(cale_fisier, sizeof(cale_fisier), "%s%c%s", director_grupa, PATH_SEP, entry->d_name);
+                if (incarca_un_student_din_fisier(cale_fisier, storage)) {
+                    total++;
+                }
+            }
+
+            closedir(dir);
+        }
+    }
+
     return total;
 #endif
 }

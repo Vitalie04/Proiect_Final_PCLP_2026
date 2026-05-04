@@ -1,3 +1,2 @@
-2026/05/03-12:33:49.914 921c Reusing MANIFEST C:\Users\vital\OneDrive\Desktop\proiect_final\.metadata\.plugins\org.eclipse.swt\EBWebView\Default\Local Storage\leveldb/MANIFEST-000001
-2026/05/03-12:33:49.944 921c Recovering log #3
-2026/05/03-12:33:49.952 921c Reusing old log C:\Users\vital\OneDrive\Desktop\proiect_final\.metadata\.plugins\org.eclipse.swt\EBWebView\Default\Local Storage\leveldb/000003.log 
+2026/05/04-23:47:38.769 7c98 Creating DB C:\Users\vital\Desktop\test_proiect\Proiect_Final_PCLP_2026\.metadata\.plugins\org.eclipse.swt\EBWebView\Default\Local Storage\leveldb since it was missing.
+2026/05/04-23:47:38.807 7c98 Reusing MANIFEST C:\Users\vital\Desktop\test_proiect\Proiect_Final_PCLP_2026\.metadata\.plugins\org.eclipse.swt\EBWebView\Default\Local Storage\leveldb/MANIFEST-000001

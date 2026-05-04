@@ -1,1 +1,11 @@
-Info: Nothing to build for medii_opengl
+23:48:02 **** Rebuild of configuration Debug for project medii_opengl ****
+Info: Internal Builder is used for build
+gcc -O0 -g3 -Wall -c -fmessage-length=0 -o "src\\medii_opengl.o" "..\\src\\medii_opengl.c" 
+..\src\medii_opengl.c: In function 'main':
+..\src\medii_opengl.c:672:17: warning: variable 'cale_fisier' set but not used [-Wunused-but-set-variable]
+  672 |     const char *cale_fisier;
+      |                 ^~~~~~~~~~~
+gcc -o medii_opengl.exe "src\\medii_opengl.o" -lfreeglut -lglu32 -lgdi32 -lopengl32 -lwinmm 
+
+23:48:04 Build Finished. 0 errors, 1 warnings. (took 1s.717ms)
+

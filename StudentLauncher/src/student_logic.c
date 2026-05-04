@@ -9,6 +9,38 @@
 
 #define printf(...) do { fprintf(stdout, __VA_ARGS__); fflush(stdout); } while (0)
 
+static double calculeaza_medie_fara_disciplina(const SituatieStudent *s, int sem, int disc_exclusa) {
+    int d;
+    int suma_credite;
+    int suma_produs;
+
+    suma_credite = 0;
+    suma_produs = 0;
+
+    for (d = 0; d < s->discipline; d++) {
+        if (d == disc_exclusa || s->note[sem][d] == -1 || s->credite[sem][d] == -1) {
+            continue;
+        }
+
+        suma_credite += s->credite[sem][d];
+        suma_produs += s->note[sem][d] * s->credite[sem][d];
+    }
+
+    return (suma_credite > 0) ? (double)suma_produs / (double)suma_credite : 0.0;
+}
+
+static void recalculeaza_indicatorii_studentilor_cu_detalii(StudentStorage *storage) {
+    int i;
+
+    for (i = 0; i < storage->nr_studenti; i++) {
+        if (storage->studenti[i].situatie.semestre > 0 &&
+            storage->studenti[i].situatie.note != NULL &&
+            storage->studenti[i].situatie.credite != NULL) {
+            calculeaza_indicatori_scolari(&storage->studenti[i].situatie);
+        }
+    }
+}
+
 void initializare_situatie(SituatieStudent *s) {
     s->semestre = 0;
     s->discipline = 0;
@@ -405,9 +437,6 @@ void afiseaza_raport_student(StudentStorage *storage) {
     int idx_restanta;
     int suma_credite;
     int suma_produs;
-    int credit_rest;
-    int punctaj_rest;
-    int credite_fara;
     double medie_fara_restanta;
     DateStudent *student;
     SituatieStudent *s;
@@ -488,10 +517,7 @@ void afiseaza_raport_student(StudentStorage *storage) {
         }
 
         if (restante_sem == 1 && idx_restanta >= 0) {
-            credit_rest = s->credite[sem][idx_restanta];
-            punctaj_rest = s->note[sem][idx_restanta] * credit_rest;
-            credite_fara = suma_credite - credit_rest;
-            medie_fara_restanta = (credite_fara > 0) ? (double)(suma_produs - punctaj_rest) / (double)credite_fara : 0.0;
+            medie_fara_restanta = calculeaza_medie_fara_disciplina(s, sem, idx_restanta);
 
             printf(
                 "Semestrul %d are exact o restanta. Medie curenta %.2f, medie fara disciplina %.2f\n",
@@ -516,13 +542,7 @@ void afiseaza_clasament_dupa_medie(StudentStorage *storage) {
         return;
     }
 
-    for (i = 0; i < storage->nr_studenti; i++) {
-        if (storage->studenti[i].situatie.semestre > 0 &&
-            storage->studenti[i].situatie.note != NULL &&
-            storage->studenti[i].situatie.credite != NULL) {
-            calculeaza_indicatori_scolari(&storage->studenti[i].situatie);
-        }
-    }
+    recalculeaza_indicatorii_studentilor_cu_detalii(storage);
 
     selectat = (int *)calloc((size_t)storage->nr_studenti, sizeof(int));
     if (selectat == NULL) {
